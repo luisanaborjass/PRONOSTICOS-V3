@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculador de Pronósticos</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<script>window.Chart || document.write('<script src="https://unpkg.com/chart.js@4.4.4/dist/chart.umd.js"><\/script>');</script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>window.XLSX || document.write('<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --white:#FFFFFF;
+    --g50:#F7F8FA; --g100:#F0F2F5; --g200:#E3E7EC; --g300:#CBD2DA; --g400:#A3ADB8;
+    --g500:#7B8794; --g600:#5A6672; --g800:#1F2A36;
+    --ink:#14202B;
+    --c50:#ECFBFE; --c100:#D0F2F9; --c300:#7DDCEC; --c500:#06B6D4; --c600:#0891B2; --c700:#0E7490; --c800:#155E75;
+    --line-real:#12263A; --line-actual:#9AA4AF; --line-sug:#5F7A94; --line-new:#06B6D4;
+    --err:#B42318;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--white);color:var(--ink);font-family:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.5;}
+  button,input,select{font:inherit;color:inherit;}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  .is-hidden{display:none !important;}
+
+  /* ---------- Layout ---------- */
+  .app{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:100vh;}
+  .sidebar{background:var(--g100);border-right:1px solid var(--g200);padding:0 22px 28px;position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;}
+  .main{padding:34px 40px 64px;max-width:1240px;width:100%;}
+  @media (max-width:880px){
+    .app{grid-template-columns:1fr;}
+    .sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--g200);}
+    .main{padding:26px 18px 48px;}
+  }
+
+  /* ---------- Sidebar ---------- */
+  .brand{display:flex;align-items:center;gap:10px;padding:26px 0 18px;border-bottom:1.5px solid var(--g300);margin-bottom:24px;}
+  .brand-mark{width:28px;height:28px;border-radius:8px;background:var(--c700);display:grid;place-items:center;flex-shrink:0;}
+  .brand-name{font-weight:800;letter-spacing:.16em;font-size:19px;}
+
+  .slot{margin-bottom:24px;}
+  .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--g200);color:var(--g600);margin-bottom:6px;}
+  .tag.req{background:var(--c100);color:var(--c800);}
+  .slot-label{font-weight:700;font-size:14px;margin-bottom:8px;}
+  .dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;padding:16px 12px;border:1.5px dashed var(--g300);border-radius:12px;background:var(--white);cursor:pointer;transition:border-color .15s, background-color .15s;}
+  .dropzone:hover,.dropzone.drag{border-color:var(--c600);background:var(--c50);}
+  .dz-main{font-size:13.5px;font-weight:600;}
+  .dz-main u{color:var(--c700);text-underline-offset:2px;}
+  .dz-sub{font-size:12px;color:var(--g500);}
+  .slot-input:focus-visible + .dropzone{outline:2px solid var(--c600);outline-offset:2px;}
+  .slot.filled .dropzone{border-style:solid;border-color:var(--c500);background:var(--c50);}
+
+  .slot-status{margin-top:8px;font-size:12.5px;color:var(--g600);}
+  .slot-status .ok{display:flex;align-items:center;gap:6px;color:var(--ink);font-weight:600;}
+  .slot-status .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}
+  .slot-status .meta{margin-left:20px;color:var(--g600);font-weight:500;}
+  .slot-status .bad{color:var(--err);font-weight:600;}
+  .slot-clear{background:none;border:0;color:var(--c700);font-weight:700;cursor:pointer;font-size:12.5px;padding:2px 6px;border-radius:6px;}
+  .slot-clear:hover{background:var(--c100);}
+
+  .side-note{display:flex;gap:8px;font-size:12.5px;color:var(--g600);margin-top:4px;padding:10px 12px;background:var(--white);border:1px solid var(--g200);border-radius:10px;}
+  details.help{margin-top:16px;font-size:12.5px;color:var(--g600);}
+  details.help summary{cursor:pointer;font-weight:700;color:var(--g800);}
+  details.help ul{margin:8px 0 0 16px;display:grid;gap:6px;}
+  .error-box{margin-top:16px;padding:10px 12px;border-radius:10px;border:1px solid #F1B8B2;background:#FEF3F2;color:var(--err);font-size:13px;}
+
+  .spinner{width:14px;height:14px;border-radius:50%;border:2.5px solid var(--g300);border-top-color:var(--c600);animation:spin .7s linear infinite;display:inline-block;vertical-align:-2px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------- Main ---------- */
+  h1{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.15;}
+  .lead{color:var(--g600);max-width:740px;margin-top:8px;}
+  .section{margin-top:38px;}
+  .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px;flex-wrap:wrap;}
+  .section-title{font-size:18px;font-weight:800;letter-spacing:-.01em;}
+  .section-sub{color:var(--g600);font-size:13px;margin-top:2px;}
+  .panel{border:1px solid var(--g200);border-radius:14px;background:var(--white);}
+
+  .select-wrap{display:flex;align-items:center;gap:8px;}
+  .select-wrap label{font-size:13px;color:var(--g600);}
+  select{appearance:none;-webkit-appearance:none;font-size:13.5px;border:1px solid var(--g300);border-radius:10px;padding:8px 34px 8px 12px;background:var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6672' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;min-width:230px;max-width:360px;cursor:pointer;}
+  select:disabled{opacity:.55;cursor:not-allowed;}
+  select:focus-visible,button:focus-visible{outline:2px solid var(--c600);outline-offset:2px;}
+
+  .chart-panel{padding:18px 18px 12px;}
+  .chart-box{position:relative;height:360px;}
+  .empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;color:var(--g500);background:var(--white);font-size:14px;padding:0 20px;}
+
+  /* KPI */
+  .kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+  @media (max-width:1000px){.kpi-grid{grid-template-columns:1fr;}}
+  .kpi{padding:18px 18px 14px;}
+  .kpi-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .kpi h3{font-size:15px;font-weight:800;}
+  .kpi h3 .abbr{font-size:11px;font-weight:700;color:var(--c800);background:var(--c100);padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:1px;}
+  .kpi-desc{font-size:12.5px;color:var(--g600);margin:6px 0 12px;min-height:38px;}
+  .chip{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--c100);color:var(--c800);white-space:nowrap;}
+  .chip.muted{background:var(--g200);color:var(--g600);}
+  .kpi-rows{list-style:none;display:grid;gap:4px;}
+  .kpi-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;}
+  .kpi-row.strong{background:var(--c50);}
+  .dot{width:9px;height:9px;border-radius:999px;flex-shrink:0;}
+  .row-text{display:flex;flex-direction:column;flex:1;min-width:0;line-height:1.25;}
+  .row-label{font-size:13px;color:var(--g800);}
+  .kpi-row.strong .row-label{font-weight:700;}
+  .row-hint{font-size:11.5px;color:var(--g500);}
+  .row-value{font-size:16px;font-weight:600;}
+  .kpi-row.strong .row-value{color:var(--c700);font-weight:700;}
+  .unit{font-size:11px;color:var(--g500);font-weight:500;font-family:'Manrope',sans-serif;}
+  .ind-note{font-size:12.5px;color:var(--g600);margin-top:12px;}
+
+  /* Table */
+  .btn{display:inline-flex;align-items:center;gap:8px;background:var(--c700);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13.5px;cursor:pointer;transition:background-color .15s;}
+  .btn:hover:not(:disabled){background:var(--c800);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .table-wrap{overflow:auto;max-height:540px;border:1px solid var(--g200);border-radius:12px;background:var(--white);}
+  table.data{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%;}
+  table.data th,table.data td{padding:9px 12px;border-bottom:1px solid var(--g100);white-space:nowrap;}
+  table.data thead th{position:sticky;top:0;background:var(--g50);color:var(--g600);font-weight:700;text-align:right;border-bottom:1px solid var(--g200);z-index:2;}
+  table.data td.num{text-align:right;font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  table.data .col-code{position:sticky;left:0;min-width:104px;max-width:104px;text-align:left;background:var(--white);z-index:1;font-family:'IBM Plex Mono',ui-monospace,monospace;}
+  table.data .col-prod{position:sticky;left:104px;min-width:250px;max-width:250px;overflow:hidden;text-overflow:ellipsis;text-align:left;background:var(--white);z-index:1;border-right:1px solid var(--g200);}
+  table.data thead th.col-code,table.data thead th.col-prod{z-index:3;text-align:left;background:var(--g50);}
+  .flag-warn{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--err);cursor:help;}
+  table.data tbody tr:nth-child(even) td{background:var(--g50);}
+  table.data tbody tr:hover td{background:var(--c50);}
+  table.data tbody tr.total td{background:var(--g100) !important;font-weight:700;border-top:2px solid var(--g300);}
+  .table-empty{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--g500);font-size:14px;border:1.5px dashed var(--g300);border-radius:12px;padding:44px 20px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 4 8-10"/></svg>
+      </span>
+      <span class="brand-name">FEBECA</span>
+    </div>
+
+    <div class="slot" id="slot-actual" data-slot="actual">
+      <span class="tag req">Obligatorio</span>
+      <p class="slot-label">Carga el pronóstico actual aquí</p>
+      <input id="input-actual" class="sr-only slot-input" type="file" accept=".xlsx,.xls,.csv" data-slot="actual">
+      <label class="dropzone" for="input-actual">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0891B2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <span class="dz-main">Arrastra el archivo o <u>elígelo</u></span>
+        <span class="dz-sub">.xlsx · .xls · .csv</span>
+      </label>
+      <div class="slot-status" aria-live="polite"></div>
+    </div>
+
+    <div class="slot" id="slot-historico" data-slot="historico">
+      <span class="tag req">Obligatorio</span>
+      <p class="slot-label">Carga la venta histórica aquí</p>
+      <input id="input-historico" class="sr-only slot-input" type="file" accept=".xlsx,.xls,.csv" data-slot="historico">
+      <label class="dropzone" for="input-historico">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0891B2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <span class="dz-main">Arrastra el archivo o <u>elígelo</u></span>
+        <span class="dz-sub">.xlsx · .xls · .csv</span>
+      </label>
+      <div class="slot-status" aria-live="polite"></div>
+    </div>
+
+    <div class="slot" id="slot-sugerido" data-slot="sugerido">
+      <span class="tag">Opcional</span>
+      <p class="slot-label">Carga el sugerido adicional aquí</p>
+      <input id="input-sugerido" class="sr-only slot-input" type="file" accept=".xlsx,.xls,.csv" data-slot="sugerido">
+      <label class="dropzone" for="input-sugerido">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0891B2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <span class="dz-main">Arrastra el archivo o <u>elígelo</u></span>
+        <span class="dz-sub">.xlsx · .xls · .csv</span>
+      </label>
+      <div class="slot-status" aria-live="polite"></div>
+    </div>
+
+    <div class="side-note">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E7490" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <span>El análisis se genera solo cuando cargas el pronóstico actual y la venta histórica. Si agregas el sugerido después, se recalcula.</span>
+    </div>
+
+    <details class="help">
+      <summary>¿Qué formato debe tener cada archivo?</summary>
+      <ul>
+        <li><b>Pronóstico actual y sugerido:</b> un renglón por producto (columna <span class="mono">Item code</span>) y un mes por columna, por ejemplo <span class="mono">Sep 2026</span>.</li>
+        <li><b>Venta histórica:</b> un renglón por producto y mes, con las columnas <span class="mono">Articulo</span>, el mes (por ejemplo <span class="mono">10-2025</span>) y <span class="mono">Venta Neta</span>.</li>
+      </ul>
+    </details>
+
+    <div id="error-box" class="error-box is-hidden" role="alert"></div>
+  </aside>
+
+  <!-- ================= MAIN ================= -->
+  <main class="main">
+    <header>
+      <h1>Calculador de pronósticos</h1>
+      <p class="lead">Sube el histórico de ventas y los pronósticos por producto. La herramienta mide qué tan lejos estuvo cada modelo y entrega una versión corregida para cada mes futuro.</p>
+    </header>
+
+    <!-- Chart -->
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Ventas reales vs. pronósticos</h2>
+          <p class="section-sub" id="chart-caption">Pasa el mouse sobre la gráfica para ver el detalle de cada mes.</p>
+        </div>
+        <div class="select-wrap">
+          <label for="product-select">Ver</label>
+          <select id="product-select" disabled><option>Todos los productos (suma)</option></select>
+        </div>
+      </div>
+      <div class="panel chart-panel">
+        <div class="chart-box">
+          <canvas id="forecast-chart"></canvas>
+          <div class="empty-state" id="chart-empty">
+            <svg width="260" height="70" viewBox="0 0 260 70" fill="none" stroke="#CBD2DA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 50 L30 22 L52 44 L80 14 L104 40 L130 20 L156 46 L184 18 L210 36 L256 12"/></svg>
+            <p>Carga el pronóstico actual y la venta histórica<br>para ver aquí la gráfica.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Indicators -->
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Indicadores del pronóstico</h2>
+          <p class="section-sub" id="ind-caption">Error, desviación y sesgo de cada pronóstico frente a la venta real.</p>
+        </div>
+      </div>
+      <div class="kpi-grid">
+        <div class="panel kpi">
+          <div class="kpi-head">
+            <h3>Error porcentual <span class="abbr">MAPE</span></h3>
+            <span class="chip is-hidden" id="chip-mejora" title="Reducción del error (MAPE) del nuevo pronóstico frente al pronóstico actual"></span>
+          </div>
+          <p class="kpi-desc">Qué tan lejos estuvo el pronóstico de la venta real, en promedio y en porcentaje.</p>
+          <ul class="kpi-rows" id="kpi-mape"></ul>
+        </div>
+        <div class="panel kpi">
+          <div class="kpi-head"><h3>Desviación media <span class="abbr">MAD</span></h3></div>
+          <p class="kpi-desc">Diferencia promedio entre el pronóstico y la venta real, en unidades.</p>
+          <ul class="kpi-rows" id="kpi-mad"></ul>
+        </div>
+        <div class="panel kpi">
+          <div class="kpi-head"><h3>Sesgo <span class="abbr">Bias</span></h3></div>
+          <p class="kpi-desc">Si el pronóstico tiende a sobreestimar (+) o a subestimar (−) la venta.</p>
+          <ul class="kpi-rows" id="kpi-bias"></ul>
+        </div>
+      </div>
+      <p class="ind-note" id="ind-note"></p>
+    </section>
+
+    <!-- New forecast table -->
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">Nuevo pronóstico</h2>
+          <p class="section-sub" id="table-caption">Una fila por producto y una columna por mes.</p>
+        </div>
+        <button id="export-btn" class="btn" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Descargar en Excel
+        </button>
+      </div>
+      <div class="table-wrap is-hidden" id="table-wrap">
+        <table class="data">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div class="table-empty" id="table-empty">El nuevo pronóstico aparecerá aquí, con una fila por producto y una columna por mes.</div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  const LOCALE = 'es-VE';
+
+  // ---- Parámetros del nuevo pronóstico (se pueden ajustar aquí) ----
+  const RECENT_MONTHS   = 6;    // meses de venta reciente que se toman como referencia
+  const TREND_WEIGHT    = 0.3;  // peso de la tendencia reciente en el nuevo pronóstico (0 a 1); el resto es el pronóstico corregido
+  const TREND_MAX_MONTHLY_RATE = 0.04;  // tope a la tasa de cambio MENSUAL propia de cada producto (±4%/mes ≈ ±60%/año), para permitir que la tendencia real se proyecte durante los 2 años sin que un historial corto o volátil dispare una extrapolación absurda
+  const OWN_SHAPE_VOLUME = 20;  // volumen mensual (unidades) desde el cual el patrón mensual propio del producto pesa más que el del conjunto
+  const HIST_SEASON_WEIGHT = 0.5; // peso de la estacionalidad de las ventas históricas del CONJUNTO (0 a 1) frente a la forma mensual del pronóstico del conjunto
+  const OWN_HIST_SEASON_WEIGHT = 1.0; // peso de la estacionalidad histórica PROPIA de cada producto (0 a 1) frente a la forma de su propio pronóstico, cuando ese producto tiene historial propio suficiente. En 1.0 se confía por completo en el patrón mensual real de ese producto (confirmado como estacionalidad de negocio, no ruido); el pronóstico original solo se usa de respaldo cuando el producto no tiene historial propio.
+  const OWN_HIST_CONFIDENCE_MONTHS = 6; // contracción estadística: con este número de meses de historial propio, el producto llega a la mitad de la confianza en su propio patrón (el resto se apoya en el patrón del conjunto); con más meses, se acerca a confianza total, reduciendo el ruido de patrones calculados con poca evidencia
+  const UNCERTAIN_MIN_MONTHS = 6; // por debajo de este número de meses con venta propia registrada, el producto se marca para revisión manual
+  const UNCERTAIN_CV = 0.6;      // coeficiente de variación (desviación estándar / promedio) de la venta propia por encima del cual se marca el producto
+  const MIN_YOY_GROWTH = 0.20;  // meta de crecimiento mínimo anual del TOTAL del portafolio, mismo mes vs. año anterior (0 = desactivado)
+  const FEBECA_TREND_WEIGHT = 0.5; // peso (0 a 1) del patrón anual general de FEBECA frente a la estacionalidad ya calculada (propia + conjunto) de cada SKU; 0.5 = promedio por igual, según lo indicado por el usuario
+  const MAX_DIR_ADJUST_PCT = 0.30; // tope (fracción del mes anterior) al tamaño del cambio que la corrección de dirección (paso 6) puede forzar al voltear el sentido de un tramo; evita saltos irreales cuando la fuente de dirección va en sentido muy opuesto a lo que el modelo ya había calculado
+  // Patrón anual general de venta de FEBECA (varios años/marcas, no derivado de un archivo en particular):
+  // sube de forma sostenida de enero a noviembre (con un ligero bache alrededor de mayo-junio) y cae
+  // fuerte en diciembre. Índice por mes calendario (0=enero .. 11=diciembre), normalizado para que el
+  // promedio de los 12 meses sea 1.0 (mismo criterio que groupShapeCal/ownCal, para no alterar el volumen
+  // total anual, solo su reparto entre meses).
+  const FEBECA_ANNUAL_SHAPE = (() => {
+    const raw = [0.75, 0.80, 0.85, 0.90, 0.88, 0.90, 0.95, 1.00, 1.08, 1.15, 1.25, 0.70]; // ene..dic
+    const avg = raw.reduce((s,v) => s+v, 0) / raw.length;
+    const idx = {};
+    raw.forEach((v,mm) => { idx[mm] = v / avg; });
+    return idx;
+  })();
+  const TREND_CV_REF = 0.5;     // desviación estándar de referencia del cambio mes a mes CONSECUTIVO de un producto; con esta volatilidad, el peso de la tendencia de ese producto se reduce a la mitad (más volatilidad = menos peso, más apoyo en el pronóstico base ya corregido)
+  const TREND_CV_MIN_PAIRS = 4; // mínimo de pares de meses calendario consecutivos con venta real (sin huecos) necesarios para medir la volatilidad de un producto; con menos pares no se penaliza (falta de evidencia, no señal de estabilidad)
+
+  // ================= State =================
+  const raw = { historico: null, actual: null, sugerido: null };
+  let hasData = false, hasSuggested = false;
+  let allRows = [], productList = [], periodList = [];
+  let uncertainByCode = {};
+  let metrics = null;
+  let selectedProduct = 'ALL';
+  let chart = null;
+  let deliveryStartIdx = -Infinity;   // primer mes que se entrega (el mes siguiente al actual)
+  let omittedMonthLabel = '';         // mes actual, que se omite de la entrega
+
+  // ================= DOM =================
+  const $ = id => document.getElementById(id);
+  const productSelect = $('product-select'), exportBtn = $('export-btn'), chartEmpty = $('chart-empty');
+  const chartCaption = $('chart-caption'), indCaption = $('ind-caption'), indNote = $('ind-note');
+  const tableWrap = $('table-wrap'), tableEmpty = $('table-empty'), tableHead = $('table-head'), tableBody = $('table-body'), tableCaption = $('table-caption');
+  const chipMejora = $('chip-mejora'), kpiMape = $('kpi-mape'), kpiMad = $('kpi-mad'), kpiBias = $('kpi-bias');
+  const errorBox = $('error-box');
+
+  // ================= Helpers =================
+  function normalizeKey(k){
+    return (k === null || k === undefined) ? '' : k.toString().trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  }
+  function toNumber(v){
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return Number.isNaN(v) ? null : v;
+    const cleaned = v.toString().replace(/[^0-9,.\-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',', '.');
+    const n = parseFloat(cleaned);
+    return Number.isNaN(n) ? null : n;
+  }
+  function pad2(n){ return n < 10 ? '0'+n : ''+n; }
+  function escapeHtml(s){
+    return (s === null || s === undefined ? '' : s.toString()).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function fmtNum(n, d){
+    if (n === null || n === undefined || Number.isNaN(n)) return '—';
+    let v = Number(n);
+    if (Math.abs(v) < Math.pow(10, -(d ?? 0)) / 2) v = 0; // evita mostrar "-0,0"
+    return v.toLocaleString(LOCALE, {minimumFractionDigits: d ?? 0, maximumFractionDigits: d ?? 0});
+  }
+  function fmtFlex(n, maxD){
+    if (n === null || n === undefined || Number.isNaN(n)) return '—';
+    return Number(n).toLocaleString(LOCALE, {minimumFractionDigits: 0, maximumFractionDigits: maxD ?? 1});
+  }
+  function fmtPct(n, d, signed){
+    if (n === null || n === undefined || Number.isNaN(n)) return '—';
+    return (signed && n > 0 ? '+' : '') + fmtNum(n, d) + '%';
+  }
+  function roundInt(n){
+    if (n === null || n === undefined || Number.isNaN(n)) return n;
+    return Math.round(n);
+  }
+  const MONTH_LABEL = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function periodLabel(year, month){ return MONTH_LABEL[month-1] + ' ' + year; }
+
+  const MONTHS = {ene:1,jan:1,feb:2,mar:3,abr:4,apr:4,may:5,jun:6,jul:7,ago:8,aug:8,sep:9,set:9,oct:10,nov:11,dic:12,dec:12};
+  function parseMonthYearHeader(h){
+    if (h instanceof Date && !isNaN(h)) return {year:h.getFullYear(), month:h.getMonth()+1};
+    if (h === null || h === undefined) return null;
+    const s = h.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const m = s.match(/^([a-z]{3,})\.?\s+(\d{4})$/);
+    if (!m) return null;
+    const mon = MONTHS[m[1].slice(0,3)];
+    if (!mon) return null;
+    return {year: parseInt(m[2],10), month: mon};
+  }
+  function parsePeriodoMesAnio(v){
+    if (v instanceof Date && !isNaN(v)) return {year:v.getFullYear(), month:v.getMonth()+1};
+    if (v === null || v === undefined) return null;
+    const s = v.toString().trim();
+    let m = s.match(/^(\d{1,2})-(\d{4})$/);
+    if (m) return {year: parseInt(m[2],10), month: parseInt(m[1],10)};
+    m = s.match(/^(\d{4})-(\d{1,2})$/);
+    if (m) return {year: parseInt(m[1],10), month: parseInt(m[2],10)};
+    return null;
+  }
+  function monthIndex(year, month){ return year * 12 + (month - 1); }
+  function labelFromIdx(idx){ return periodLabel(Math.floor(idx / 12), (idx % 12) + 1); }
+
+  // Proyección por tendencia para un mes objetivo, usando solo ventas anteriores a ese mes:
+  //  - R = promedio de venta de los últimos RECENT_MONTHS meses disponibles antes del mes objetivo
+  //  - P = promedio de los RECENT_MONTHS meses anteriores a esos
+  //  - se mide la tasa de cambio MENSUAL propia de ese producto (R vs P) y se proyecta de forma
+  //    compuesta (como un interés compuesto) durante todo el horizonte, para que la tendencia real
+  //    de cada SKU se note también en el segundo año y no se aplane a los pocos meses. Se acota la
+  //    tasa mensual (no el resultado final) para que un producto chico o muy volátil no dispare una
+  //    extrapolación absurda a 2 años.
+  function trendProjection(series, targetIdx, lastSalesIdx){
+    if (!series) return null;
+    const a = Math.min(targetIdx - 1, lastSalesIdx);   // último mes de venta que se puede usar
+    const avg = (from, to) => {
+      let s = 0, n = 0;
+      for (let i = from; i <= to; i++){
+        const v = series[i];
+        if (v !== undefined && v !== null){ s += v; n++; }
+      }
+      return n > 0 ? s / n : null;
+    };
+    const R = avg(a - (RECENT_MONTHS - 1), a);
+    if (R === null) return null;
+    const P = avg(a - (2 * RECENT_MONTHS - 1), a - RECENT_MONTHS);
+    if (P === null || P <= 0) return Math.max(0, R);   // no hay suficiente historial para medir una tendencia confiable
+    let monthlyRate = (R - P) / P / RECENT_MONTHS;
+    monthlyRate = Math.max(-TREND_MAX_MONTHLY_RATE, Math.min(TREND_MAX_MONTHLY_RATE, monthlyRate));
+    const h = targetIdx - a;                            // meses hacia adelante desde el último mes usado
+    const t = R * Math.pow(1 + monthlyRate, h + 1);
+    return Math.max(0, t);
+  }
+
+  // Señal de confianza en la tendencia de UN producto, basada en qué tan errático es su cambio
+  // mes a mes CONSECUTIVO (no el bloque de 6 vs 6 meses que usa trendProjection para la tasa, sino
+  // cada par de meses calendario seguidos con venta real, sin huecos). Un producto cuya venta salta
+  // de forma muy irregular de un mes al siguiente (alto coeficiente de variación de esos cambios)
+  // aporta una tasa de tendencia menos confiable, así que su tendencia pesa menos en el nivel final
+  // y se apoya más en el pronóstico base ya corregido (más estable). Esto NO cambia cómo se calcula
+  // la tasa de tendencia en sí (eso lo sigue haciendo trendProjection con el método de 6 vs 6 meses,
+  // ya validado); solo ajusta cuánto se confía en ella para cada SKU en particular.
+  function trendConfidence(series, lastSalesIdx){
+    if (!series) return 1;
+    const idxs = Object.keys(series).map(Number).filter(i => i <= lastSalesIdx).sort((a,b) => a - b);
+    const rates = [];
+    for (let k = 0; k < idxs.length - 1; k++){
+      const i = idxs[k];
+      if (idxs[k+1] !== i + 1) continue;   // solo meses calendario consecutivos, sin saltar huecos (stockouts)
+      const v0 = series[i], v1 = series[i+1];
+      if (v0 > 0) rates.push((v1 - v0) / v0);
+    }
+    if (rates.length < TREND_CV_MIN_PAIRS) return 1;   // muy pocos pares para juzgar volatilidad: no se penaliza
+    const mean = rates.reduce((s,v) => s + v, 0) / rates.length;
+    const variance = rates.reduce((s,v) => s + (v - mean) * (v - mean), 0) / rates.length;
+    const sigma = Math.sqrt(variance);
+    return TREND_CV_REF / (TREND_CV_REF + sigma);
+  }
+
+  function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function showError(msg){ errorBox.textContent = msg; errorBox.classList.remove('is-hidden'); }
+  function clearError(){ errorBox.classList.add('is-hidden'); errorBox.textContent = ''; }
+
+  // ================= File slots =================
+  document.querySelectorAll('.slot').forEach(slot => {
+    const key = slot.dataset.slot;
+    const input = slot.querySelector('.slot-input');
+    const dz = slot.querySelector('.dropzone');
+    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+    ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+    dz.addEventListener('drop', e => {
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadSlot(key, f, slot);
+    });
+    input.addEventListener('change', e => {
+      const f = e.target.files && e.target.files[0];
+      if (f) loadSlot(key, f, slot);
+    });
+    slot.querySelector('.slot-status').addEventListener('click', e => {
+      if (e.target.closest('.slot-clear')) clearSlot(key, slot);
+    });
+  });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  function setSlotStatus(slot, html, ok){
+    slot.querySelector('.slot-status').innerHTML = html;
+    slot.classList.toggle('filled', !!ok);
+  }
+
+  function loadSlot(key, file, slot){
+    clearError();
+    setSlotStatus(slot, '<span class="spinner"></span> Leyendo archivo…', false);
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        if (typeof XLSX === 'undefined') throw new Error('XLSX_NOT_LOADED');
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const grid = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null, raw:true});
+        const parsed = key === 'historico' ? parseHistorico(grid) : parseForecastWide(grid);
+        if (parsed.error){
+          raw[key] = null;
+          setSlotStatus(slot, '<span class="bad">' + escapeHtml(parsed.error) + '</span>', false);
+        } else {
+          raw[key] = parsed;
+          const nProd = new Set(parsed.rows.map(r => r.code)).size;
+          const nMonths = new Set(parsed.rows.map(r => r.periodKey)).size;
+          setSlotStatus(slot,
+            '<div class="ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0891B2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 6L9 17l-5-5"/></svg>' +
+            '<span class="fname" title="' + escapeHtml(file.name) + '">' + escapeHtml(file.name) + '</span>' +
+            '<button type="button" class="slot-clear">Quitar</button></div>' +
+            '<div class="meta">' + nProd + (nProd === 1 ? ' producto' : ' productos') + ' · ' + nMonths + ' meses' +
+            (parsed.skippedZeroMonths ? ' · ' + parsed.skippedZeroMonths + (parsed.skippedZeroMonths === 1 ? ' mes omitido (todo en cero)' : ' meses omitidos (todo en cero)') : '') + '</div>', true);
+        }
+      } catch(err){
+        console.error(err);
+        raw[key] = null;
+        const msg = (err && err.message === 'XLSX_NOT_LOADED')
+          ? 'No se cargó la librería para leer Excel. Revisa tu conexión a internet y recarga la página.'
+          : 'No se pudo leer este archivo.';
+        setSlotStatus(slot, '<span class="bad">' + msg + '</span>', false);
+      }
+      refresh();
+    };
+    reader.onerror = function(){
+      raw[key] = null;
+      setSlotStatus(slot, '<span class="bad">Error al leer el archivo.</span>', false);
+      refresh();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function clearSlot(key, slot){
+    raw[key] = null;
+    slot.querySelector('.slot-input').value = '';
+    setSlotStatus(slot, '', false);
+    refresh();
+  }
+
+  // ================= Parsers =================
+  function parseHistorico(grid){
+    let headerRowIdx = -1, colArticulo = -1, colVenta = -1, colPeriodo = -1, colMarca = -1;
+    for (let i = 0; i < grid.length; i++){
+      const norms = (grid[i] || []).map(normalizeKey);
+      const iArt = norms.findIndex(n => n === 'articulo');
+      const iVenta = norms.findIndex(n => n.includes('venta'));
+      if (iArt >= 0 && iVenta >= 0){
+        headerRowIdx = i; colArticulo = iArt; colVenta = iVenta;
+        colPeriodo = norms.findIndex(n => n.includes('mes') || n.includes('periodo') || n.includes('fecha'));
+        colMarca = norms.findIndex(n => n === 'marca');
+        break;
+      }
+    }
+    if (headerRowIdx < 0) return {error:'No encontramos las columnas Articulo y Venta. Verifica que sea el archivo de venta histórica.'};
+    if (colPeriodo < 0) return {error:'No encontramos la columna del mes en este archivo.'};
+
+    const rows = [];
+    for (let i = headerRowIdx + 1; i < grid.length; i++){
+      const row = grid[i] || [];
+      const articuloRaw = row[colArticulo];
+      if (articuloRaw === null || articuloRaw === undefined || articuloRaw.toString().trim() === '') continue;
+      const periodo = parsePeriodoMesAnio(row[colPeriodo]);
+      if (!periodo) continue;
+      const articulo = articuloRaw.toString().trim();
+      const code = articulo.split(/\s+/)[0];
+      const venta = toNumber(row[colVenta]);
+      if (venta === null) continue;
+      rows.push({
+        code, desc: articulo.slice(code.length).trim(), marca: colMarca >= 0 ? row[colMarca] : null,
+        year: periodo.year, month: periodo.month,
+        periodKey: periodo.year + '-' + pad2(periodo.month), venta
+      });
+    }
+    if (rows.length === 0) return {error:'Este archivo no tiene filas válidas de producto, mes y venta.'};
+    return {rows};
+  }
+
+  function parseForecastWide(grid){
+    let headerRowIdx = -1, colItemCode = -1, colMarca = -1, colCategoria = -1, colDescription = -1;
+    for (let i = 0; i < grid.length; i++){
+      const norms = (grid[i] || []).map(normalizeKey);
+      const iCode = norms.findIndex(n => n === 'itemcode');
+      if (iCode >= 0){
+        headerRowIdx = i; colItemCode = iCode;
+        colMarca = norms.findIndex(n => n === 'marca');
+        colCategoria = norms.findIndex(n => n === 'categoria');
+        colDescription = norms.findIndex(n => n.startsWith('descri'));
+        break;
+      }
+    }
+    if (headerRowIdx < 0) return {error:'No encontramos la columna Item code. Verifica que sea un archivo de pronóstico por producto.'};
+
+    const headerRow = grid[headerRowIdx] || [];
+    const catRow = grid[headerRowIdx + 1] || [];
+    const dateCols = [];
+    for (let idx = 0; idx < headerRow.length; idx++){
+      const h = headerRow[idx];
+      if (h === null || h === undefined) continue;
+      if (normalizeKey(h) === 'total') continue;
+      const d = parseMonthYearHeader(h);
+      if (d) dateCols.push({idx, year:d.year, month:d.month});
+    }
+    if (dateCols.length === 0) return {error:'No encontramos columnas de meses (por ejemplo "Sep 2026") en este archivo.'};
+
+    let lastLabel = '';
+    const colLabel = {};
+    dateCols.forEach(c => {
+      const rawLabel = catRow[c.idx];
+      if (rawLabel !== null && rawLabel !== undefined && rawLabel.toString().trim() !== '') lastLabel = rawLabel.toString().trim();
+      colLabel[c.idx] = lastLabel;
+    });
+    // Se descartan las columnas de "Actual sales": la venta real viene del archivo histórico
+    const forecastCols = dateCols.filter(c => {
+      const n = normalizeKey(colLabel[c.idx]);
+      return !(n.includes('actual') || n.includes('venta'));
+    });
+    const usedCols = forecastCols.length > 0 ? forecastCols : dateCols;
+
+    const dataRows = grid.slice(headerRowIdx + 2).filter(row => row && row[colItemCode] !== null && row[colItemCode] !== undefined && row[colItemCode].toString().trim() !== '');
+    // Un mes donde TODOS los productos vienen en cero es relleno del archivo, no un pronóstico real
+    const activeCols = usedCols.filter(c => dataRows.some(row => { const v = toNumber(row[c.idx]); return v !== null && v !== 0; }));
+    if (activeCols.length === 0) return {error:'Los meses de pronóstico de este archivo vienen vacíos o en cero.'};
+
+    const rows = [];
+    for (let i = headerRowIdx + 2; i < grid.length; i++){
+      const row = grid[i] || [];
+      const itemCode = row[colItemCode];
+      if (itemCode === null || itemCode === undefined || itemCode.toString().trim() === '') continue;
+      const code = itemCode.toString().trim();
+      const description = colDescription >= 0 && row[colDescription] !== null && row[colDescription] !== undefined ? row[colDescription].toString().trim() : null;
+      activeCols.forEach(c => {
+        const value = toNumber(row[c.idx]);
+        if (value === null) return;
+        rows.push({
+          code, description, marca: colMarca >= 0 ? row[colMarca] : null, categoria: colCategoria >= 0 ? row[colCategoria] : null,
+          year: c.year, month: c.month, periodKey: c.year + '-' + pad2(c.month), value
+        });
+      });
+    }
+    if (rows.length === 0) return {error:'No encontramos filas de pronóstico con producto y valores numéricos.'};
+    return {rows, skippedZeroMonths: usedCols.length - activeCols.length};
+  }
+
+  // ================= Metrics =================
+  function computeMetrics(actualArr, forecastArr){
+    let sumAPE = 0, countAPE = 0, sumAbsErr = 0, countAbsErr = 0, sumErr = 0, sumActual = 0;
+    for (let i = 0; i < actualArr.length; i++){
+      const a = actualArr[i], f = forecastArr[i];
+      if (a === null || f === null || Number.isNaN(a) || Number.isNaN(f)) continue;
+      const err = f - a;
+      sumAbsErr += Math.abs(err); countAbsErr++;
+      sumErr += err; sumActual += a;
+      if (a !== 0){ sumAPE += Math.abs(err/a); countAPE++; }
+    }
+    return {
+      mape: countAPE > 0 ? (sumAPE/countAPE)*100 : 0,
+      mad: countAbsErr > 0 ? sumAbsErr/countAbsErr : 0,
+      bias: sumActual !== 0 ? (sumErr/sumActual)*100 : 0,
+      n: countAbsErr
+    };
+  }
+
+  // ================= Analysis =================
+  function refresh(){
+    if (raw.historico && raw.actual){
+      try { runAnalysis(); }
+      catch(err){
+        console.error(err);
+        showError('Ocurrió un problema al calcular el análisis. Revisa los archivos e inténtalo de nuevo. (Detalle técnico: ' + (err && err.message ? err.message : err) + ')');
+        showEmpty();
+      }
+    } else {
+      showEmpty();
+    }
+  }
+
+  function runAnalysis(){
+    hasSuggested = !!raw.sugerido;
+
+    // Una venta histórica en 0 se interpreta como "no hubo inventario ese mes" (no como demanda real
+    // de cero), así que se trata como dato ausente: no participa en la comparación contra el pronóstico
+    // ni en el cálculo de tendencia/estacionalidad de ese producto.
+    const histMap = {}, actMap = {}, sugMap = {}, productInfo = {};
+    raw.historico.rows.forEach(r => {
+      if (r.venta !== 0) (histMap[r.code] = histMap[r.code] || {})[r.periodKey] = r.venta;
+      if (!productInfo[r.code]) productInfo[r.code] = {desc: r.desc};
+    });
+    raw.actual.rows.forEach(r => {
+      (actMap[r.code] = actMap[r.code] || {})[r.periodKey] = r.value;
+      if (r.description) productInfo[r.code] = {desc: r.description};
+      else if (!productInfo[r.code]) productInfo[r.code] = {desc: ''};
+    });
+    if (hasSuggested){
+      raw.sugerido.rows.forEach(r => {
+        (sugMap[r.code] = sugMap[r.code] || {})[r.periodKey] = r.value;
+        if (!productInfo[r.code] || !productInfo[r.code].desc) productInfo[r.code] = {desc: r.description || ''};
+      });
+    }
+
+    const allCodes = new Set([...Object.keys(histMap), ...Object.keys(actMap), ...Object.keys(sugMap)]);
+    const periodMap = {};
+    [histMap, actMap, sugMap].forEach(map => {
+      Object.values(map).forEach(byPeriod => {
+        Object.keys(byPeriod).forEach(pk => {
+          if (!periodMap[pk]){ const [y,m] = pk.split('-').map(Number); periodMap[pk] = {year:y, month:m}; }
+        });
+      });
+    });
+    periodList = Object.keys(periodMap).map(pk => ({
+      periodKey: pk, year: periodMap[pk].year, month: periodMap[pk].month,
+      periodDate: new Date(periodMap[pk].year, periodMap[pk].month - 1, 1),
+      label: periodLabel(periodMap[pk].year, periodMap[pk].month)
+    })).sort((a,b) => a.periodDate - b.periodDate);
+
+    let rows = [];
+    allCodes.forEach(code => {
+      periodList.forEach(p => {
+        const ventas = histMap[code] ? (histMap[code][p.periodKey] ?? null) : null;
+        const pactual = actMap[code] ? (actMap[code][p.periodKey] ?? null) : null;
+        const psugerido = hasSuggested && sugMap[code] ? (sugMap[code][p.periodKey] ?? null) : null;
+        if (ventas === null && pactual === null && psugerido === null) return;
+        rows.push({code, periodKey:p.periodKey, periodDate:p.periodDate, periodLabel:p.label, ventas, pactual, psugerido});
+      });
+    });
+
+    const pairsActual = rows.filter(r => r.ventas !== null && r.pactual !== null);
+    const mActual = computeMetrics(pairsActual.map(r => r.ventas), pairsActual.map(r => r.pactual));
+
+    let mSuggested = null, weightActual = 1, weightSuggested = 0, correctionFactor = 1;
+    if (hasSuggested){
+      const pairsSug = rows.filter(r => r.ventas !== null && r.psugerido !== null);
+      mSuggested = computeMetrics(pairsSug.map(r => r.ventas), pairsSug.map(r => r.psugerido));
+      if (mActual.n === 0 && mSuggested.n > 0){ weightActual = 0; weightSuggested = 1; }
+      else if (mSuggested.n === 0 && mActual.n > 0){ weightActual = 1; weightSuggested = 0; }
+      else if (mActual.n === 0 && mSuggested.n === 0){ weightActual = 0.5; weightSuggested = 0.5; }
+      else {
+        const invA = mActual.mape > 0 ? 1/mActual.mape : 1e9;
+        const invS = mSuggested.mape > 0 ? 1/mSuggested.mape : 1e9;
+        const denom = invA + invS;
+        weightActual = denom > 0 ? invA/denom : 0.5;
+        weightSuggested = 1 - weightActual;
+      }
+    } else if (pairsActual.length > 0){
+      const sumF = pairsActual.reduce((s,r) => s + r.pactual, 0);
+      const sumA = pairsActual.reduce((s,r) => s + r.ventas, 0);
+      const biasDecimal = sumA !== 0 ? (sumF - sumA)/sumA : 0;
+      correctionFactor = (1 + biasDecimal) !== 0 ? 1/(1 + biasDecimal) : 1;
+    }
+
+    // 1) Pronóstico base (corregido por sesgo, o combinado con el sugerido)
+    // Si en algún mes solo viene uno de los dos pronósticos, se escala con la relación que
+    // ese producto tiene con la combinación en los demás meses, para que no haya saltos.
+    const ratioA = {}, ratioS = {};
+    let globalRatioA = 1, globalRatioS = 1;
+    if (hasSuggested){
+      const acc = {};
+      let gBlend = 0, gA = 0, gS = 0;
+      rows.forEach(r => {
+        if (r.pactual === null || r.psugerido === null) return;
+        const blend = weightActual*r.pactual + weightSuggested*r.psugerido;
+        const a = acc[r.code] = acc[r.code] || {blend:0, a:0, s:0};
+        a.blend += blend; a.a += r.pactual; a.s += r.psugerido;
+        gBlend += blend; gA += r.pactual; gS += r.psugerido;
+      });
+      if (gA > 0) globalRatioA = gBlend / gA;
+      if (gS > 0) globalRatioS = gBlend / gS;
+      Object.keys(acc).forEach(code => {
+        ratioA[code] = acc[code].a > 0 ? acc[code].blend / acc[code].a : globalRatioA;
+        ratioS[code] = acc[code].s > 0 ? acc[code].blend / acc[code].s : globalRatioS;
+      });
+    }
+    rows = rows.map(r => {
+      let base = null;
+      if (hasSuggested){
+        if (r.pactual !== null && r.psugerido !== null) base = weightActual*r.pactual + weightSuggested*r.psugerido;
+        else if (r.pactual !== null) base = r.pactual * (ratioA[r.code] ?? globalRatioA);
+        else if (r.psugerido !== null) base = r.psugerido * (ratioS[r.code] ?? globalRatioS);
+      } else if (r.pactual !== null){
+        base = r.pactual * correctionFactor;
+      }
+      return {...r, base};
+    });
+
+    // 2) Forma mensual del conjunto de productos (subidas y bajadas típicas de cada mes)
+    const baseByCode = {}, totByKey = {}, cntByKey = {};
+    rows.forEach(r => {
+      if (r.base === null) return;
+      (baseByCode[r.code] = baseByCode[r.code] || []).push(r.base);
+      totByKey[r.periodKey] = (totByKey[r.periodKey] || 0) + r.base;
+      cntByKey[r.periodKey] = (cntByKey[r.periodKey] || 0) + 1;
+    });
+    const nProdBase = Object.keys(baseByCode).length;
+    const fullKeys = Object.keys(totByKey).filter(k => cntByKey[k] === nProdBase);
+    const meanFull = fullKeys.length ? fullKeys.reduce((s,k) => s + totByKey[k], 0) / fullKeys.length : 0;
+    const portfolioShape = {};
+    Object.keys(totByKey).forEach(k => {
+      portfolioShape[k] = (cntByKey[k] === nProdBase && meanFull > 0) ? totByKey[k] / meanFull : 1;
+    });
+    const baseMean = {};
+    Object.keys(baseByCode).forEach(code => { baseMean[code] = baseByCode[code].reduce((s,v) => s + v, 0) / baseByCode[code].length; });
+
+    // 3) Ventas recientes por producto
+    // Un mes en 0 (sin inventario) no entra en el promedio de venta reciente de ESE producto,
+    // pero sí cuenta para saber hasta qué mes tenemos datos (lastSalesIdx) y para el total del
+    // conjunto (sumar 0 no cambia el total, así que la estacionalidad del grupo no se distorsiona).
+    const seriesByCode = {}, totalSalesByIdx = {};
+    let lastSalesIdx = -Infinity;
+    raw.historico.rows.forEach(r => {
+      const idx = monthIndex(r.year, r.month);
+      if (r.venta !== 0) (seriesByCode[r.code] = seriesByCode[r.code] || {})[idx] = r.venta;
+      totalSalesByIdx[idx] = (totalSalesByIdx[idx] || 0) + r.venta;
+      if (idx > lastSalesIdx) lastSalesIdx = idx;
+    });
+    const idxByKey = {};
+    periodList.forEach(p => { idxByKey[p.periodKey] = monthIndex(p.year, p.month); });
+    const calMonthOf = key => ((idxByKey[key] % 12) + 12) % 12;
+
+    // Mes actual = el más reciente entre el mes del calendario y el último mes con ventas.
+    // La entrega omite ese mes y empieza en el siguiente.
+    const today = new Date();
+    const currentIdx = Math.max(monthIndex(today.getFullYear(), today.getMonth() + 1), lastSalesIdx);
+    deliveryStartIdx = currentIdx + 1;
+    omittedMonthLabel = labelFromIdx(currentIdx);
+
+    // Estacionalidad de las ventas históricas del conjunto de productos, usando solo ventas
+    // anteriores al mes que se pronostica (así el mes de comparación no "ve" su propia venta)
+    const histSeasonIndex = targetIdx => {
+      const cutoff = Math.min(targetIdx - 1, lastSalesIdx);
+      const m = ((targetIdx % 12) + 12) % 12;
+      let all = 0, allN = 0, occ = 0, occN = 0;
+      Object.keys(totalSalesByIdx).forEach(k => {
+        const i = Number(k);
+        if (i > cutoff) return;
+        const v = totalSalesByIdx[k];
+        all += v; allN++;
+        if (((i % 12) + 12) % 12 === m){ occ += v; occN++; }
+      });
+      if (!allN || !occN || all <= 0) return 1;
+      return (occ / occN) / (all / allN);
+    };
+    const groupShapeByKey = {};
+    Object.keys(totByKey).forEach(k => {
+      groupShapeByKey[k] = (1 - HIST_SEASON_WEIGHT) * (portfolioShape[k] ?? 1) + HIST_SEASON_WEIGHT * histSeasonIndex(idxByKey[k]);
+    });
+
+    // Lo mismo, pero con la venta histórica PROPIA de cada producto (no la del conjunto): así un
+    // producto con meses de baja rotación muy marcados (por ejemplo, diciembre o junio siempre bajos
+    // para ESE artículo) lo refleja en su propio patrón, en vez de heredar la forma suave del
+    // pronóstico original o la del resto del portafolio.
+    const ownHistSeasonIndex = (code, targetIdx) => {
+      const series = seriesByCode[code];
+      if (!series) return null;
+      const cutoff = Math.min(targetIdx - 1, lastSalesIdx);
+      const m = ((targetIdx % 12) + 12) % 12;
+      let all = 0, allN = 0, occ = 0, occN = 0;
+      Object.keys(series).forEach(k => {
+        const i = Number(k);
+        if (i > cutoff) return;
+        const v = series[k];
+        if (v === null || v === undefined) return;
+        all += v; allN++;
+        if (((i % 12) + 12) % 12 === m){ occ += v; occN++; }
+      });
+      if (!allN || !occN || all <= 0) return null;   // sin historial propio suficiente: se usa el patrón del pronóstico
+      return { value: (occ / occN) / (all / allN), n: allN };   // n = meses de historial propio detrás del cálculo
+    };
+    // Un solo valor por mes calendario (ene..dic), promediando los años disponibles, para que
+    // la variación de un mes a otro sea la misma en 2026-2027 que en 2027-2028, etc.
+    const groupShapeCal = {};
+    { const acc = {};
+      Object.keys(groupShapeByKey).forEach(k => {
+        const mm = calMonthOf(k);
+        (acc[mm] = acc[mm] || []).push(groupShapeByKey[k]);
+      });
+      Object.keys(acc).forEach(mm => { groupShapeCal[mm] = acc[mm].reduce((s,v) => s+v, 0) / acc[mm].length; });
+    }
+
+    // Patrón mensual propio de cada producto, también por mes calendario (promedio de los años
+    // disponibles): así el mismo mes se comporta igual de un año al siguiente.
+    const ownCal = {};
+    Object.keys(baseByCode).forEach(code => {
+      const bbar = baseMean[code];
+      const acc = {};
+      rows.forEach(r => {
+        if (r.code !== code || r.base === null || bbar <= 0) return;
+        const mm = calMonthOf(r.periodKey);
+        (acc[mm] = acc[mm] || []).push(r.base / bbar);
+      });
+      const idx = {};
+      Object.keys(acc).forEach(mm => { idx[mm] = acc[mm].reduce((s,v) => s+v, 0) / acc[mm].length; });
+      ownCal[code] = idx;
+    });
+
+    // Patrón mensual propio del pronóstico SUGERIDO (crudo, sin mezclar con el pronóstico actual ni
+    // con la corrección de sesgo), también por mes calendario: es la fuente que el usuario pidió
+    // imitar en sus subidas y bajadas.
+    const sugCal = {};
+    if (hasSuggested){
+      Object.keys(sugMap).forEach(code => {
+        const vals = Object.values(sugMap[code]).filter(v => v !== null && v !== undefined);
+        const sbar = vals.length ? vals.reduce((s,v) => s+v, 0) / vals.length : 0;
+        if (sbar <= 0) return;
+        const acc = {};
+        rows.forEach(r => {
+          if (r.code !== code || r.psugerido === null || r.psugerido === undefined) return;
+          const mm = calMonthOf(r.periodKey);
+          (acc[mm] = acc[mm] || []).push(r.psugerido / sbar);
+        });
+        const idx = {};
+        Object.keys(acc).forEach(mm => { idx[mm] = acc[mm].reduce((s,v) => s+v, 0) / acc[mm].length; });
+        sugCal[code] = idx;
+      });
+    }
+
+    // 4) Nuevo pronóstico = nivel (tendencia reciente + base, puede crecer año a año)
+    //    x patrón del mes calendario (se repite igual cada año), redondeado a la unidad
+    rows = rows.map(r => {
+      let nuevo = null, tendencia = null;
+      if (r.base !== null){
+        const bbar = baseMean[r.code];
+        tendencia = trendProjection(seriesByCode[r.code], idxByKey[r.periodKey], lastSalesIdx);
+        // El peso de la tendencia se ajusta por producto según qué tan errático es su cambio mes a
+        // mes consecutivo (trendConfidence): un SKU volátil confía menos en su propia tendencia y
+        // más en el pronóstico base ya corregido; uno estable usa el peso completo.
+        const effTrendWeight = TREND_WEIGHT * trendConfidence(seriesByCode[r.code], lastSalesIdx);
+        const level = tendencia !== null ? effTrendWeight * tendencia + (1 - effTrendWeight) * bbar : bbar;
+        const mm = calMonthOf(r.periodKey);
+        const ownForecastPattern = (ownCal[r.code] && ownCal[r.code][mm] !== undefined) ? ownCal[r.code][mm] : 1;
+        const ownHist = ownHistSeasonIndex(r.code, idxByKey[r.periodKey]);
+        // Cada SKU tiene su propia estacionalidad: cuando el producto tiene venta histórica propia,
+        // se confía en ELLA en vez de en el patrón genérico del pronóstico o del conjunto. Pero la
+        // CONFIANZA en ese patrón propio se pondera por cuántos meses de historial real lo respaldan
+        // (contracción estadística / shrinkage), no por el volumen del producto: un producto con 12
+        // meses de historia merece más peso propio que uno con solo 2-3, sin importar cuánto venda.
+        // Así se conserva la tendencia individual de cada SKU, pero se amortigua el ruido de un
+        // patrón calculado con muy poca evidencia, en vez de inyectarlo tal cual al pronóstico.
+        const wOwn = ownHist !== null ? ownHist.n / (ownHist.n + OWN_HIST_CONFIDENCE_MONTHS)
+                                       : (bbar > 0 ? bbar / (bbar + OWN_SHAPE_VOLUME) : 0);
+        const own = ownHist !== null ? (1 - OWN_HIST_SEASON_WEIGHT) * ownForecastPattern + OWN_HIST_SEASON_WEIGHT * ownHist.value : ownForecastPattern;
+        const calcShape = wOwn * own + (1 - wOwn) * (groupShapeCal[mm] ?? 1);
+        // La estacionalidad ya calculada (propia + conjunto) se combina con el patrón anual general de
+        // FEBECA (sube ene-nov, cae fuerte en dic), aplicado a cada SKU individualmente, para que el
+        // pronóstico se apegue también a esa tendencia de negocio conocida y no solo al historial de
+        // este archivo.
+        const shapePrev = (1 - FEBECA_TREND_WEIGHT) * calcShape + FEBECA_TREND_WEIGHT * FEBECA_ANNUAL_SHAPE[mm];
+        // Cuando hay pronóstico SUGERIDO para este SKU y este mes calendario, su propia forma mensual
+        // (sugCal) se adopta directamente como la forma del pronóstico: así la curva del nuevo
+        // pronóstico se mueve en paralelo a la del sugerido (mismas subidas y bajadas relativas), y
+        // solo el NIVEL (tendencia + base) aporta la diferencia numérica entre una y otra. Sin
+        // sugerido para ese tramo, se usa la forma anterior (propia + conjunto + FEBECA).
+        const sugShapeVal = (hasSuggested && sugCal[r.code] && sugCal[r.code][mm] !== undefined) ? sugCal[r.code][mm] : null;
+        const shape = sugShapeVal !== null ? sugShapeVal : shapePrev;
+        nuevo = Math.max(0, Math.round(level * shape));
+      }
+      return {...r, nuevo, tendencia};
+    });
+
+    // 5) Piso de crecimiento del portafolio: la empresa tiene la meta de crecer al menos
+    // MIN_YOY_GROWTH (20%) cada año. Se aplica solo a nivel de TOTAL del portafolio por mes
+    // calendario (no producto por producto, para no forzar crecimiento en artículos en declive):
+    // la suma de todos los productos de, por ejemplo, octubre no puede bajar de un año al
+    // siguiente y debe crecer al menos 20%. Si la suma cae por debajo de ese piso, se escalan
+    // proporcionalmente todos los productos de ese mes-año (se mantiene la proporción entre ellos).
+    {
+      const totalsByCalYear = {}; // mm -> { year: totalNuevo }
+      rows.forEach(r => {
+        if (r.nuevo === null) return;
+        const mm = calMonthOf(r.periodKey);
+        const year = r.periodDate.getFullYear();
+        totalsByCalYear[mm] = totalsByCalYear[mm] || {};
+        totalsByCalYear[mm][year] = (totalsByCalYear[mm][year] || 0) + r.nuevo;
+      });
+      const scaleFactor = {}; // mm -> year -> factor
+      Object.keys(totalsByCalYear).forEach(mm => {
+        const years = Object.keys(totalsByCalYear[mm]).map(Number).sort((a,b) => a - b);
+        let prevAdjTotal = null;
+        years.forEach(y => {
+          const raw = totalsByCalYear[mm][y];
+          let factor = 1;
+          if (prevAdjTotal !== null && raw > 0){
+            const minAllowed = prevAdjTotal * (1 + MIN_YOY_GROWTH);
+            if (raw < minAllowed) factor = minAllowed / raw;
+          }
+          scaleFactor[mm] = scaleFactor[mm] || {};
+          scaleFactor[mm][y] = factor;
+          prevAdjTotal = raw * factor;
+        });
+      });
+      rows = rows.map(r => {
+        if (r.nuevo === null) return r;
+        const mm = calMonthOf(r.periodKey);
+        const year = r.periodDate.getFullYear();
+        const f = (scaleFactor[mm] && scaleFactor[mm][year]) || 1;
+        const nuevo = f === 1 ? r.nuevo : Math.max(0, Math.round(r.nuevo * f));
+        return {...r, nuevo};
+      });
+    }
+
+    // 6) Dirección mes a mes fiel a CADA SKU. Cuando hay pronóstico SUGERIDO para ese tramo del
+    // calendario, manda ÉL: se imita su propio sube-y-baja de un mes al siguiente (no su magnitud,
+    // solo el sentido). Si no hay sugerido para ese tramo (archivo no cargado, o ese SKU/mes no
+    // aparece en él), se usa como respaldo el criterio anterior: el promedio (50/50) de lo que indica
+    // la venta histórica real del producto y lo que indica su propio pronóstico base (FEBECA). Esa
+    // dirección se repite igual todos los años del pronóstico. El tamaño del cambio lo sigue
+    // decidiendo el modelo; aquí solo se corrige el sentido cuando no coincide, con un tope
+    // (MAX_DIR_ADJUST_PCT) para no generar saltos irreales cuando la fuente de dirección va muy en
+    // contra de lo que el modelo ya había calculado.
+    {
+      // Estacionalidad propia a partir de la venta histórica real (ratio de cada mes calendario
+      // contra el promedio del producto), sin restricción de "cutoff": describe el patrón real
+      // completo del SKU, mes por mes, para poder medir el cambio de un mes calendario al siguiente
+      // incluso cuando el par exacto de meses consecutivos no está disponible sin huecos.
+      const ownCalIndexFull = code => {
+        const series = seriesByCode[code];
+        if (!series) return null;
+        let all = 0, allN = 0;
+        const sumByCal = {}, cntByCal = {};
+        Object.keys(series).forEach(k => {
+          const i = Number(k), v = series[i];
+          all += v; allN++;
+          const mm = ((i % 12) + 12) % 12;
+          sumByCal[mm] = (sumByCal[mm] || 0) + v;
+          cntByCal[mm] = (cntByCal[mm] || 0) + 1;
+        });
+        if (!allN || all <= 0) return null;
+        const avgAll = all / allN;
+        const idx = {};
+        for (let mm = 0; mm < 12; mm++) idx[mm] = cntByCal[mm] ? (sumByCal[mm]/cntByCal[mm]) / avgAll : null;
+        return idx;
+      };
+
+      // % de cambio de un índice de mes calendario (mm-1 -> mm), o null si falta alguno de los dos.
+      const calRatioChange = (calIdx, mm) => {
+        if (!calIdx) return null;
+        const prevMm = (mm + 11) % 12;
+        const a = calIdx[prevMm], b = calIdx[mm];
+        if (a === null || a === undefined || b === null || b === undefined || a === 0) return null;
+        return (b - a) / a;
+      };
+
+      const allCodesForDir = new Set([...Object.keys(seriesByCode), ...Object.keys(ownCal), ...Object.keys(sugCal)]);
+      const dirByCalPairByCode = {};
+      allCodesForDir.forEach(code => {
+        const calIdxHist = ownCalIndexFull(code);       // patrón propio real (venta histórica)
+        const calIdxBase = ownCal[code] || null;         // patrón propio del pronóstico base (FEBECA)
+        const calIdxSug = sugCal[code] || null;          // patrón propio del pronóstico SUGERIDO
+        const dirs = {};
+        for (let mm = 0; mm < 12; mm++){
+          const ratioSug = calRatioChange(calIdxSug, mm);
+          if (ratioSug !== null){
+            // El sugerido manda cuando hay dato para este tramo: se imita su sentido, sin importar
+            // qué digan la venta histórica o el pronóstico base para ese mismo tramo.
+            dirs[mm] = Math.sign(ratioSug);
+            continue;
+          }
+          // Respaldo: sin sugerido para este tramo, se usa el criterio anterior (promedio 50/50).
+          const ratioHist = calRatioChange(calIdxHist, mm);
+          const ratioBase = calRatioChange(calIdxBase, mm);
+          let combined = null;
+          if (ratioHist !== null && ratioBase !== null) combined = (ratioHist + ratioBase) / 2;
+          else if (ratioHist !== null) combined = ratioHist;
+          else if (ratioBase !== null) combined = ratioBase;
+          if (combined !== null) dirs[mm] = Math.sign(combined);
+        }
+        dirByCalPairByCode[code] = dirs;
+      });
+
+      const rowsByCode = {};
+      rows.forEach(r => { if (r.nuevo !== null) (rowsByCode[r.code] = rowsByCode[r.code] || []).push(r); });
+      Object.keys(rowsByCode).forEach(code => {
+        const arr = rowsByCode[code].sort((a,b) => a.periodDate - b.periodDate);
+        const dirs = dirByCalPairByCode[code] || {};
+        for (let i = 1; i < arr.length; i++){
+          const mm = calMonthOf(arr[i].periodKey);
+          const expected = dirs[mm];
+          if (expected === undefined || expected === 0) continue;   // sin patrón claro: no se fuerza nada
+          const prevVal = arr[i-1].nuevo, currVal = arr[i].nuevo;
+          if (Math.sign(currVal - prevVal) === expected) continue;
+          let delta = Math.abs(currVal - prevVal) * expected;
+          if (delta === 0) delta = Math.max(1, Math.round(prevVal * 0.01)) * expected;
+          const maxDelta = prevVal * MAX_DIR_ADJUST_PCT;
+          if (Math.abs(delta) > maxDelta) delta = maxDelta * expected;
+          arr[i].nuevo = Math.max(0, Math.round(prevVal + delta));
+        }
+      });
+    }
+
+    rows = rows.map(r => {
+      const errActualPct = (r.ventas !== null && r.pactual !== null && r.ventas !== 0) ? ((r.pactual - r.ventas)/r.ventas)*100 : null;
+      const errNuevoPct = (r.ventas !== null && r.nuevo !== null && r.ventas !== 0) ? ((r.nuevo - r.ventas)/r.ventas)*100 : null;
+      return {...r, errActualPct, errNuevoPct};
+    });
+
+    const pairsOpt = rows.filter(r => r.ventas !== null && r.nuevo !== null);
+    const mOptimized = computeMetrics(pairsOpt.map(r => r.ventas), pairsOpt.map(r => r.nuevo));
+
+    metrics = {actual: mActual, suggested: mSuggested, optimized: mOptimized, weightActual, weightSuggested};
+    allRows = rows;
+
+    // Marca de incertidumbre: productos con poco historial propio o con venta muy variable
+    // mes a mes son los que menos se pueden confiar en el patrón estacional calculado, así que
+    // se señalan para que el comprador los revise a mano en vez de tomarlos al pie de la letra.
+    uncertainByCode = {};
+    allCodes.forEach(code => {
+      const series = seriesByCode[code];
+      const vals = series ? Object.values(series).filter(v => v !== null && v !== undefined) : [];
+      const n = vals.length;
+      let cv = null;
+      if (n > 0){
+        const mean = vals.reduce((s,v) => s + v, 0) / n;
+        if (mean > 0){
+          const variance = vals.reduce((s,v) => s + Math.pow(v - mean, 2), 0) / n;
+          cv = Math.sqrt(variance) / mean;
+        }
+      }
+      const reasons = [];
+      if (n < UNCERTAIN_MIN_MONTHS) reasons.push('solo ' + n + ' mes' + (n === 1 ? '' : 'es') + ' de historial propio');
+      if (cv !== null && cv > UNCERTAIN_CV) reasons.push('venta muy variable mes a mes (coef. de variación ' + Math.round(cv * 100) + '%)');
+      uncertainByCode[code] = {flag: reasons.length > 0, reason: reasons.join('; ')};
+    });
+
+    productList = Array.from(allCodes).map(code => {
+      const desc = ((productInfo[code] && productInfo[code].desc) || '').toString().trim();
+      return {code, desc, label: desc ? code + ' — ' + desc : code};
+    }).sort((a,b) => a.code.localeCompare(b.code, 'es', {numeric:true}));
+
+    if (selectedProduct !== 'ALL' && !productList.some(p => p.code === selectedProduct)) selectedProduct = 'ALL';
+    render();
+  }
+
+  // ================= Views =================
+  function aggregateAll(){
+    const sums = {};
+    allRows.forEach(r => {
+      const s = sums[r.periodKey] = sums[r.periodKey] || {ventas:0,ventasN:0,pactual:0,pactualN:0,psugerido:0,psugeridoN:0,nuevo:0,nuevoN:0};
+      if (r.ventas !== null){ s.ventas += r.ventas; s.ventasN++; }
+      if (r.pactual !== null){ s.pactual += r.pactual; s.pactualN++; }
+      if (r.psugerido !== null){ s.psugerido += r.psugerido; s.psugeridoN++; }
+      if (r.nuevo !== null){ s.nuevo += r.nuevo; s.nuevoN++; }
+    });
+    return periodList.map(p => {
+      const s = sums[p.periodKey] || {};
+      return {
+        periodKey: p.periodKey, periodLabel: p.label,
+        ventas: s.ventasN ? s.ventas : null, pactual: s.pactualN ? s.pactual : null,
+        psugerido: s.psugeridoN ? s.psugerido : null, nuevo: s.nuevoN ? s.nuevo : null
+      };
+    });
+  }
+  function currentDisplayRows(){
+    if (selectedProduct === 'ALL') return aggregateAll();
+    return allRows.filter(r => r.code === selectedProduct).sort((a,b) => a.periodDate - b.periodDate);
+  }
+  function currentMetrics(){
+    if (selectedProduct === 'ALL') return metrics;
+    const rowsP = allRows.filter(r => r.code === selectedProduct);
+    const pA = rowsP.filter(r => r.ventas !== null && r.pactual !== null);
+    const pS = hasSuggested ? rowsP.filter(r => r.ventas !== null && r.psugerido !== null) : [];
+    const pO = rowsP.filter(r => r.ventas !== null && r.nuevo !== null);
+    return {
+      actual: computeMetrics(pA.map(r => r.ventas), pA.map(r => r.pactual)),
+      suggested: hasSuggested ? computeMetrics(pS.map(r => r.ventas), pS.map(r => r.psugerido)) : null,
+      optimized: computeMetrics(pO.map(r => r.ventas), pO.map(r => r.nuevo))
+    };
+  }
+  function selectionLabel(){
+    if (selectedProduct === 'ALL') return 'todos los productos (suma)';
+    const p = productList.find(x => x.code === selectedProduct);
+    return p ? p.label : selectedProduct;
+  }
+
+  function showEmpty(){
+    hasData = false; metrics = null; allRows = []; productList = []; periodList = []; uncertainByCode = {};
+    if (chart){ chart.destroy(); chart = null; }
+    chartEmpty.classList.remove('is-hidden');
+    chartEmpty.querySelector('p').innerHTML = CHART_EMPTY_HTML;
+    productSelect.innerHTML = '<option value="ALL">Todos los productos (suma)</option>';
+    productSelect.disabled = true;
+    chartCaption.textContent = 'Pasa el mouse sobre la gráfica para ver el detalle de cada mes.';
+    indCaption.textContent = 'Error, desviación y sesgo de cada pronóstico frente a la venta real.';
+    renderIndicators(null);
+    tableWrap.classList.add('is-hidden');
+    tableEmpty.classList.remove('is-hidden');
+    tableCaption.textContent = 'Una fila por producto y una columna por mes.';
+    exportBtn.disabled = true;
+  }
+
+  function render(){
+    hasData = true;
+    chartEmpty.classList.add('is-hidden');
+    productSelect.disabled = false;
+    productSelect.innerHTML = '<option value="ALL">Todos los productos (suma)</option>' +
+      productList.map(p => `<option value="${escapeHtml(p.code)}">${escapeHtml(p.label)}</option>`).join('');
+    productSelect.value = selectedProduct;
+    exportBtn.disabled = false;
+    renderSelection();
+    renderTable();
+  }
+
+  productSelect.addEventListener('change', () => {
+    if (!hasData) return;
+    selectedProduct = productSelect.value;
+    renderSelection();
+  });
+
+  function renderSelection(){
+    const label = selectionLabel();
+    chartCaption.textContent = 'Mostrando ' + label + '. Pasa el mouse sobre la gráfica para ver el detalle de cada mes.';
+    indCaption.textContent = 'Mostrando ' + label + '.';
+    renderIndicators(currentMetrics());
+    renderChart(currentDisplayRows());
+  }
+
+  // ---------- Indicators ----------
+  function kpiRow(color, label, value, hint, strong){
+    return `<li class="kpi-row${strong ? ' strong' : ''}">
+      <span class="dot" style="background:${color}"></span>
+      <span class="row-text"><span class="row-label">${label}</span>${hint ? `<span class="row-hint">${hint}</span>` : ''}</span>
+      <span class="row-value mono">${value}</span>
+    </li>`;
+  }
+  function biasHint(b){
+    if (Math.abs(b) < 0.5) return 'sin sesgo';
+    return b > 0 ? 'sobreestima' : 'subestima';
+  }
+  function comparedPeriodsText(){
+    const keys = Array.from(new Set(allRows
+      .filter(r => r.ventas !== null && r.pactual !== null && (selectedProduct === 'ALL' || r.code === selectedProduct))
+      .map(r => r.periodKey))).sort();
+    const labels = keys.map(k => (periodList.find(p => p.periodKey === k) || {}).label).filter(Boolean);
+    if (labels.length === 0) return '';
+    if (labels.length <= 3) return labels.join(', ');
+    return labels[0] + ' a ' + labels[labels.length - 1] + ' (' + labels.length + ' meses)';
+  }
+
+  function renderIndicators(m){
+    const cA = getVar('--line-actual'), cS = getVar('--line-sug'), cN = getVar('--line-new');
+    const dash = '—';
+    const has = (x) => x && x.n > 0;
+
+    if (!m){
+      const rows = (fmt) => [
+        kpiRow(cA, 'Pronóstico actual', dash),
+        kpiRow(cN, 'Nuevo pronóstico', dash, '', true)
+      ].join('');
+      kpiMape.innerHTML = rows(); kpiMad.innerHTML = rows(); kpiBias.innerHTML = rows();
+      chipMejora.classList.add('is-hidden');
+      indNote.textContent = 'Aquí verás cuánto se equivocó cada pronóstico y cuánto mejora el nuevo.';
+      return;
+    }
+
+    let mape = kpiRow(cA, 'Pronóstico actual', has(m.actual) ? fmtPct(m.actual.mape, 0) : dash);
+    let mad  = kpiRow(cA, 'Pronóstico actual', has(m.actual) ? fmtNum(m.actual.mad, 0) + ' <span class="unit">uds</span>' : dash);
+    let bias = kpiRow(cA, 'Pronóstico actual', has(m.actual) ? fmtPct(m.actual.bias, 0, true) : dash, has(m.actual) ? biasHint(m.actual.bias) : '');
+    if (hasSuggested){
+      mape += kpiRow(cS, 'Pronóstico sugerido', has(m.suggested) ? fmtPct(m.suggested.mape, 0) : dash);
+      mad  += kpiRow(cS, 'Pronóstico sugerido', has(m.suggested) ? fmtNum(m.suggested.mad, 0) + ' <span class="unit">uds</span>' : dash);
+      bias += kpiRow(cS, 'Pronóstico sugerido', has(m.suggested) ? fmtPct(m.suggested.bias, 0, true) : dash, has(m.suggested) ? biasHint(m.suggested.bias) : '');
+    }
+    mape += kpiRow(cN, 'Nuevo pronóstico', has(m.optimized) ? fmtPct(m.optimized.mape, 0) : dash, '', true);
+    mad  += kpiRow(cN, 'Nuevo pronóstico', has(m.optimized) ? fmtNum(m.optimized.mad, 0) + ' <span class="unit">uds</span>' : dash, '', true);
+    bias += kpiRow(cN, 'Nuevo pronóstico', has(m.optimized) ? fmtPct(m.optimized.bias, 0, true) : dash, has(m.optimized) ? biasHint(m.optimized.bias) : '', true);
+    kpiMape.innerHTML = mape; kpiMad.innerHTML = mad; kpiBias.innerHTML = bias;
+
+    const improvement = (has(m.actual) && m.actual.mape > 0 && has(m.optimized))
+      ? ((m.actual.mape - m.optimized.mape) / m.actual.mape) * 100 : null;
+    if (improvement === null){
+      chipMejora.classList.add('is-hidden');
+    } else {
+      chipMejora.classList.remove('is-hidden');
+      chipMejora.classList.toggle('muted', improvement < 0);
+      chipMejora.textContent = improvement >= 0 ? 'Mejora de ' + fmtNum(improvement, 0) + '%' : 'Sin mejora';
+    }
+
+    if (!has(m.actual)){
+      indNote.textContent = 'No hay meses en común entre la venta real y el pronóstico, por eso no se puede calcular el error de esta selección.';
+    } else {
+      const n = m.actual.n;
+      indNote.textContent = 'Calculado con ' + n + (n === 1 ? ' dato' : ' datos') + ' (producto × mes) donde hay venta real y pronóstico a la vez. Meses comparados: ' + comparedPeriodsText() + '. Para cada uno, el nuevo pronóstico usa solo ventas anteriores a ese mes.';
+    }
+  }
+
+  // ---------- Chart ----------
+  const CHART_EMPTY_HTML = 'Carga el pronóstico actual y la venta histórica<br>para ver aquí la gráfica.';
+  function chartUnavailable(msg){
+    if (chart){ chart.destroy(); chart = null; }
+    chartEmpty.classList.remove('is-hidden');
+    chartEmpty.querySelector('p').innerHTML = msg;
+  }
+  function renderChart(dispRows){
+    if (typeof Chart === 'undefined'){
+      chartUnavailable('No se pudo cargar la librería de gráficas.<br>Revisa tu conexión a internet y recarga la página. Los indicadores y la tabla sí funcionan.');
+      return;
+    }
+    try { drawChart(dispRows); chartEmpty.classList.add('is-hidden'); }
+    catch(err){ console.error(err); chartUnavailable('No se pudo dibujar la gráfica de esta selección.'); }
+  }
+  function drawChart(dispRows){
+    const labels = dispRows.map(r => r.periodLabel);
+    const datasets = [
+      { label: 'Ventas reales', data: dispRows.map(r => r.ventas), borderColor: getVar('--line-real'), backgroundColor: 'transparent',
+        borderWidth: 2.5, tension: 0.25, pointRadius: 2, pointBackgroundColor: getVar('--line-real'), spanGaps: false },
+      { label: 'Pronóstico actual', data: dispRows.map(r => r.pactual), borderColor: getVar('--line-actual'), backgroundColor: 'transparent',
+        borderDash: [7,5], borderWidth: 2, tension: 0.25, pointRadius: 0, pointHoverRadius: 4, spanGaps: false },
+      { label: 'Nuevo pronóstico optimizado', data: dispRows.map(r => r.nuevo), borderColor: getVar('--line-new'), backgroundColor: 'transparent',
+        borderWidth: 3.5, tension: 0.25, pointRadius: 3, pointBackgroundColor: '#FFFFFF', pointBorderColor: getVar('--line-new'), pointBorderWidth: 2, spanGaps: false }
+    ];
+    if (hasSuggested){
+      datasets.splice(2, 0, { label: 'Pronóstico sugerido', data: dispRows.map(r => r.psugerido), borderColor: getVar('--line-sug'), backgroundColor: 'transparent',
+        borderDash: [2,4], borderWidth: 2.5, borderCapStyle: 'round', tension: 0.25, pointRadius: 0, pointHoverRadius: 4, spanGaps: false });
+    }
+
+    if (chart){ chart.destroy(); chart = null; }
+    const canvas = $('forecast-chart');
+    const stale = Chart.getChart ? Chart.getChart(canvas) : null;
+    if (stale) stale.destroy();
+    chart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { color: '#14202B', usePointStyle: true, pointStyle: 'line', boxWidth: 34, font: {family: "'Manrope'", size: 12.5} } },
+          tooltip: {
+            backgroundColor: '#FFFFFF', borderColor: '#CBD2DA', borderWidth: 1,
+            titleColor: '#14202B', bodyColor: '#1F2A36', padding: 10, cornerRadius: 8,
+            callbacks: { label: function(c){
+              const v = c.parsed.y;
+              return c.dataset.label + ': ' + (v === null || v === undefined ? '—' : Number(v).toLocaleString(LOCALE, {maximumFractionDigits: 0}));
+            }}
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#5A6672', autoSkipPadding: 14, font: {family: "'IBM Plex Mono'", size: 11} }, grid: { color: '#F0F2F5' } },
+          y: { title: { display: true, text: 'Unidades', color: '#7B8794', font: {family: "'Manrope'", size: 12} },
+               ticks: { color: '#5A6672', precision: 0, font: {family: "'IBM Plex Mono'", size: 11} }, grid: { color: '#E3E7EC' }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  // ---------- New forecast table (one row per product, one column per month) ----------
+  function buildWide(){
+    const cols = periodList.filter(p => monthIndex(p.year, p.month) >= deliveryStartIdx &&
+      allRows.some(r => r.periodKey === p.periodKey && r.nuevo !== null));
+    const byCode = {};
+    allRows.forEach(r => { if (r.nuevo !== null) (byCode[r.code] = byCode[r.code] || {})[r.periodKey] = r.nuevo; });
+    const rows = productList.filter(p => byCode[p.code]).map(p => ({
+      code: p.code, desc: p.desc, label: p.label,
+      uncertain: !!(uncertainByCode[p.code] && uncertainByCode[p.code].flag),
+      uncertainReason: (uncertainByCode[p.code] && uncertainByCode[p.code].reason) || '',
+      values: cols.map(c => byCode[p.code][c.periodKey] ?? null)
+    }));
+    const totals = cols.map((c, i) => rows.reduce((s, r) => s + (r.values[i] ?? 0), 0));
+    return {cols, rows, totals};
+  }
+
+  function renderTable(){
+    const wide = buildWide();
+    if (wide.rows.length === 0 || wide.cols.length === 0){
+      tableWrap.classList.add('is-hidden');
+      tableEmpty.classList.remove('is-hidden');
+      tableEmpty.textContent = 'No hay meses futuros con pronóstico para mostrar.';
+      return;
+    }
+    tableEmpty.classList.add('is-hidden');
+    tableWrap.classList.remove('is-hidden');
+    tableHead.innerHTML = '<tr><th class="col-code">Código</th><th class="col-prod">Producto</th>' +
+      wide.cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') + '</tr>';
+
+    tableBody.innerHTML = wide.rows.map(r =>
+      `<tr><td class="col-code">${escapeHtml(r.code)}</td><td class="col-prod" title="${escapeHtml(r.desc || r.code)}">${escapeHtml(r.desc || '—')}` +
+      (r.uncertain ? `<span class="flag-warn" title="Revisar a mano: ${escapeHtml(r.uncertainReason)}">⚠ Revisar</span>` : '') + `</td>` +
+      r.values.map(v => `<td class="num">${fmtFlex(v, 0)}</td>`).join('') + '</tr>'
+    ).join('') +
+      `<tr class="total"><td class="col-code">Total</td><td class="col-prod">Todos los productos</td>` +
+      wide.totals.map(v => `<td class="num">${fmtFlex(v, 0)}</td>`).join('') + '</tr>';
+
+    const nUncertain = wide.rows.filter(r => r.uncertain).length;
+    tableCaption.textContent = wide.rows.length + (wide.rows.length === 1 ? ' producto' : ' productos') + ' · ' + wide.cols.length + ' meses (' +
+      wide.cols[0].label + ' a ' + wide.cols[wide.cols.length - 1].label + '). Desliza hacia la derecha para ver todos los meses.' +
+      (nUncertain > 0 ? ' ⚠ ' + nUncertain + (nUncertain === 1 ? ' producto marcado' : ' productos marcados') + ' para revisión manual (poco historial propio o venta muy variable).' : '');
+  }
+
+  // ================= Export =================
+  exportBtn.addEventListener('click', () => {
+    if (!hasData) return;
+    const productMap = {}; productList.forEach(p => productMap[p.code] = p);
+
+    const dataRows = allRows.map(r => {
+      const row = {
+        'Código': r.code,
+        'Producto': (productMap[r.code] && productMap[r.code].desc) || r.code,
+        'Período': r.periodLabel,
+        'Ventas Reales': r.ventas !== null ? roundInt(r.ventas) : '',
+        'Pronóstico Actual': r.pactual !== null ? roundInt(r.pactual) : ''
+      };
+      if (hasSuggested) row['Pronóstico Sugerido'] = r.psugerido !== null ? roundInt(r.psugerido) : '';
+      row['Base corregida'] = r.base !== null ? roundInt(r.base) : '';
+      row['Tendencia últimos ' + RECENT_MONTHS + ' meses'] = r.tendencia !== null ? roundInt(r.tendencia) : '';
+      row['Nuevo Pronóstico Optimizado'] = r.nuevo !== null ? roundInt(r.nuevo) : '';
+      row['Error Actual (%)'] = r.errActualPct !== null ? roundInt(r.errActualPct) : '';
+      row['Error Nuevo (%)'] = r.errNuevoPct !== null ? roundInt(r.errNuevoPct) : '';
+      return row;
+    });
+
+    const mRow = (name, m) => ({
+      'Modelo': name,
+      'MAPE (%)': m && m.n > 0 ? roundInt(m.mape) : '',
+      'MAD': m && m.n > 0 ? roundInt(m.mad) : '',
+      'Sesgo (%)': m && m.n > 0 ? roundInt(m.bias) : '',
+      'Datos comparados': m ? m.n : 0
+    });
+    const metricsRows = [mRow('Pronóstico Actual', metrics.actual)];
+    if (hasSuggested) metricsRows.push(mRow('Pronóstico Sugerido', metrics.suggested));
+    metricsRows.push(mRow('Nuevo Pronóstico Optimizado', metrics.optimized));
+    metricsRows.push({});
+    metricsRows.push({ 'Modelo': 'Peso del pronóstico actual (%)', 'MAPE (%)': roundInt(metrics.weightActual * 100) });
+    if (hasSuggested) metricsRows.push({ 'Modelo': 'Peso del pronóstico sugerido (%)', 'MAPE (%)': roundInt(metrics.weightSuggested * 100) });
+
+    const wide = buildWide();
+    const aoa = [['Código', 'Producto', 'Revisar manualmente', 'Motivo', ...wide.cols.map(c => c.label)]];
+    wide.rows.forEach(r => aoa.push([r.code, r.desc || '', r.uncertain ? 'Sí' : 'No', r.uncertainReason || '', ...r.values.map(v => v === null ? '' : roundInt(v))]));
+    aoa.push(['Total', 'Todos los productos', '', '', ...wide.totals.map(v => roundInt(v))]);
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.json_to_sheet(dataRows);
+    const ws2 = XLSX.utils.json_to_sheet(metricsRows);
+    const ws3 = XLSX.utils.aoa_to_sheet(aoa);
+    ws3['!cols'] = [{wch:14}, {wch:44}, {wch:16}, {wch:44}, ...wide.cols.map(() => ({wch:11}))];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Pronóstico Optimizado');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Métricas de Precisión');
+    XLSX.utils.book_append_sheet(wb, ws3, 'Nuevo Pronóstico por Mes');
+    XLSX.writeFile(wb, 'nuevo_pronostico.xlsx');
+  });
+
+  // ================= Init =================
+  showEmpty();
+
+})();
+</script>
+</body>
+</html>
